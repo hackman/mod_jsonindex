@@ -4,6 +4,8 @@ The current HTML implementation with mod_autoindex is nice, but it lacks one maj
 
 With this module the list of files is directly JSON encoded and you can very simply implement this into your AJAX web applications.
 
+!!! Warning: This is the alpha release of the module. The current version of the code has some bugs. I'm planning to fix them soon.
+
 
 If you have any issues, complains or suggestions, please forward them to me:
   mm SO yuhu.biz
