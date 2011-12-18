@@ -1,0 +1,9 @@
+The basic idea of this module is to provide easy access to the list of files located in a single directory.
+
+The current HTML implementation with mod_autoindex is nice, but it lacks one major point, its output has to be additionally parsed.
+
+With this module the list of files is directly JSON encoded and you can very simply implement this into your AJAX web applications.
+
+
+If you have any issues, complains or suggestions, please forward them to me:
+  mm SO yuhu.biz
