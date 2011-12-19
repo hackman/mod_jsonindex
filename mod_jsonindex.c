@@ -67,10 +67,10 @@ static int handle_jsonindex(request_rec *r) {
 	r->content_type = "text/plain";
 	ap_send_http_header(r);
 	ap_hard_timeout("send directory", r);
-    if (r->header_only) {
-        ap_kill_timeout(r);
-        return OK;
-    }
+	if (r->header_only) {
+		ap_kill_timeout(r);
+		return OK;
+	}
 
 	if (r->args && strstr(r->args, "pretty") != NULL)
 		pretty = 1;
@@ -130,11 +130,8 @@ static int handle_jsonindex(request_rec *r) {
 		ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_ERR, r, "Error: readdir failed\n");
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
-	if (closedir(dir) == -1) {
-		ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_ERR, r, "Error: uable to close dir\n");
-		return DECLINED;
-	}
-	return DONE;
+
+	return OK;
 }
 
 static const handler_rec jsonindex_handlers[] = {
