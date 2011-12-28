@@ -24,6 +24,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include "httpd.h"
 #include "http_config.h"
