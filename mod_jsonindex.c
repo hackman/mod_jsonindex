@@ -22,29 +22,34 @@
  * 
  */
 
-#include <dirent.h>
-#include <errno.h>
+#include "mod_jsonindex.h"
 
-#include "httpd.h"
-#include "http_config.h"
-#include "http_core.h"
-#include "http_request.h"
-#include "http_protocol.h"
-#include "http_log.h"
-#include "http_main.h"
-#include "util_script.h"
-
+#ifdef APACHE2
+module AP_MODULE_DECLARE_DATA jsonindex_module;
+#else
 module MODULE_VAR_EXPORT jsonindex_module;
+#endif
+
+
 
 static int handle_jsonindex(request_rec *r) {
     r->allowed |= (1 << M_GET);
 	if (r->method_number != M_GET) {
 		return DECLINED;
     }
-
-	int allow_opts = ap_allow_options(r);
+#ifdef APACHE2
+	if ( strcmp(r->handler, "httpd/json-directory") != 0 && strcmp(r->handler, "json-directory") == 0 ) {
+		return DECLINED;
+	}
+	apr_finfo_t item;
+	apr_dir_t *dir;
+	apr_status_t status;
+#else
     DIR *dir;
     struct dirent *item;
+#endif
+
+	int allow_opts = ap_allow_options(r);
 	int not_start = 0;
 	int pretty = 0;
 	char buf[1022];
@@ -52,23 +57,40 @@ static int handle_jsonindex(request_rec *r) {
     /* OK, nothing easy.  Trot out the heavy artillery... */
 
     if (!(allow_opts & OPT_INDEXES)) {
+#ifdef APACHE2
+		ap_log_rerror(APLOG_MARK, APLOG_NOTICE, 0, r, "Directory index forbidden by rule: %s", r->filename);
+#else
 		ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_ERR, r, "Directory index forbidden by rule: %s", r->filename);
+#endif
 		return HTTP_FORBIDDEN;
     }
 	if (r->filename[strlen(r->filename) - 1] != '/') {
+#ifdef APACHE2
+	    r->filename = apr_pstrcat(r->pool, r->filename, "/", NULL);
+#else
 	    r->filename = ap_pstrcat(r->pool, r->filename, "/", NULL);
+#endif
 	}
 
+#ifdef APACHE2
+	if (apr_dir_open(&dir, r->filename, r->pool) != APR_SUCCESS) {
+		ap_log_rerror(APLOG_MARK, APLOG_ERR, 0, r, "Can't open directory for index: %s", r->filename);
+#else
 	if (!(dir = ap_popendir(r->pool, r->filename))) {
 		ap_log_rerror(APLOG_MARK, APLOG_ERR, r, "Can't open directory for index: %s", r->filename);
+#endif
 		return HTTP_FORBIDDEN;
 	}
 
 	r->content_type = "text/plain";
+#ifndef APACHE2
 	ap_send_http_header(r);
 	ap_hard_timeout("send directory", r);
+#endif
 	if (r->header_only) {
+#ifndef APACHE2
 		ap_kill_timeout(r);
+#endif
 		return OK;
 	}
 
@@ -80,7 +102,21 @@ static int handle_jsonindex(request_rec *r) {
 	else
 		ap_rputs("{", r);
 
-	for(;;) {
+	while(1) {
+#ifdef APACHE2
+		status = apr_dir_read(&item, APR_FINFO_MIN | APR_FINFO_NAME, dir);
+		if (APR_STATUS_IS_INCOMPLETE(status)) {
+			continue; /* ignore un-stat()able files */
+		} else if (status != APR_SUCCESS) {
+			break;
+		}
+
+		if (strcmp(item.name, ".") == 0 || strcmp(item.name, "..") == 0) {
+			// I should add skipping of AccessFileName
+			// and if possible the files that are protected with deny from all
+			continue;       // skip . and .. directories
+		}
+#else
 		errno = 0;
 		item = readdir(dir);
 		if (item == NULL)
@@ -91,6 +127,9 @@ static int handle_jsonindex(request_rec *r) {
 			// and if possible the files that are protected with deny from all
 			continue;       // skip . and .. directories
 		}
+#endif
+
+
 
 		if (not_start) {
 			ap_rputs(",", r);
@@ -101,6 +140,27 @@ static int handle_jsonindex(request_rec *r) {
 		}
 
 		if (pretty)
+#ifdef APACHE2
+			if (item.filetype == APR_DIR) {
+				ap_rprintf(r, "  \"%s\" : [ 1, \"\" ]", item.name);
+			} else if (item.filetype == APR_LNK) {
+				memset(&buf, '\0', 1022);
+				readlink(item.name, buf, 1022);
+				ap_rprintf(r, "  \"%s\" : [ 2, \"%s\" ]", item.name, buf);
+			} else {
+				ap_rprintf(r, "  \"%s\" : [ 0, \"\" ]", item.name);
+			}
+		else
+			if (item.filetype == APR_DIR) {
+				ap_rprintf(r, "\"%s\":[1,\"\"]", item.name);
+			} else if (item.filetype == APR_LNK) {
+				memset(&buf, '\0', 1022);
+				readlink(item.name, buf, 1022);
+				ap_rprintf(r, "\"%s\":[2,\"%s\"]", item.name, buf);
+			} else {
+				ap_rprintf(r, "\"%s\":[0,\"\"]", item.name);
+			}
+#else
 			if (item->d_type == DT_DIR) {
 				ap_rprintf(r, "  \"%s\" : [ 1, \"\" ]", item->d_name);
 			} else if (item->d_type == DT_LNK) {
@@ -120,6 +180,7 @@ static int handle_jsonindex(request_rec *r) {
 			} else {
 				ap_rprintf(r, "\"%s\":[0,\"\"]", item->d_name);
 			}
+#endif // APACHE2
 	}
 	if (pretty)
 		ap_rputs("\n}\n", r);
@@ -127,13 +188,33 @@ static int handle_jsonindex(request_rec *r) {
 		ap_rputs("}", r);
 
 	if (errno != 0) {
+#ifdef APACHE2
+		ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_ERR, 0, r, "Error: readdir failed\n");
+#else
 		ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_ERR, r, "Error: readdir failed\n");
+#endif
 		return HTTP_INTERNAL_SERVER_ERROR;
 	}
 
 	return OK;
 }
 
+#ifdef APACHE2
+static void register_hooks(apr_pool_t *p) {
+	static const char * const aszPost[] = { "mod_autoindex.c", NULL };
+	ap_hook_header_parser(handle_jsonindex, NULL, aszPost, APR_HOOK_MIDDLE);
+}
+
+module AP_MODULE_DECLARE_DATA jsonindex_module = {
+	STANDARD20_MODULE_STUFF,
+	NULL,			/* per-directory config creator */
+	NULL,			/* dir config merger */
+	NULL,			/* server config creator */
+	NULL,			/* server config merger */
+	NULL,			/* command table */
+	register_hooks,	/* set up other request processing hooks */
+};
+#else
 static const handler_rec jsonindex_handlers[] = {
 	{DIR_MAGIC_TYPE, handle_jsonindex},
 	{"httpd/json-directory", handle_jsonindex},
@@ -162,3 +243,4 @@ module MODULE_VAR_EXPORT jsonindex_module = {
     NULL,			/* child_exit */
     NULL			/* post read-request */
 };
+#endif // APACHE2
