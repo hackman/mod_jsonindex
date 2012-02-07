@@ -52,6 +52,7 @@ static int handle_jsonindex(request_rec *r) {
 	int allow_opts = ap_allow_options(r);
 	int not_start = 0;
 	int pretty = 0;
+	int simple = 0;
 	char buf[1022];
 
     /* OK, nothing easy.  Trot out the heavy artillery... */
@@ -96,11 +97,20 @@ static int handle_jsonindex(request_rec *r) {
 
 	if (r->args && strstr(r->args, "pretty") != NULL)
 		pretty = 1;
+	if (r->args && strstr(r->args, "simple") != NULL)
+		simple = 1;
     
-	if (pretty)
-		ap_rputs("{\n", r);
-	else
-		ap_rputs("{", r);
+	if (simple) {
+		if (pretty)
+			ap_rputs("[\n", r);
+		else
+			ap_rputs("[", r);
+	} else {
+		if (pretty)
+			ap_rputs("{\n", r);
+		else
+			ap_rputs("{", r);
+	}
 
 	while(1) {
 #ifdef APACHE2
@@ -141,52 +151,90 @@ static int handle_jsonindex(request_rec *r) {
 
 		if (pretty)
 #ifdef APACHE2
-			if (item.filetype == APR_DIR) {
-				ap_rprintf(r, "  \"%s\" : [ 1, \"\" ]", item.name);
-			} else if (item.filetype == APR_LNK) {
-				memset(&buf, '\0', 1022);
-				readlink(item.name, buf, 1022);
-				ap_rprintf(r, "  \"%s\" : [ 2, \"%s\" ]", item.name, buf);
+			if (simple) {
+				if (item.filetype == APR_DIR) {
+					ap_rprintf(r, " [ \"%s\", 1 ]", item.name);
+				} else {
+					ap_rprintf(r, " [ \"%s\", 0 ]", item.name);
+				}
 			} else {
-				ap_rprintf(r, "  \"%s\" : [ 0, \"\" ]", item.name);
+				if (item.filetype == APR_DIR) {
+					ap_rprintf(r, "  \"%s\" : [ 1, \"\" ]", item.name);
+				} else if (item.filetype == APR_LNK) {
+					memset(&buf, '\0', 1022);
+					readlink(item.name, buf, 1022);
+					ap_rprintf(r, "  \"%s\" : [ 2, \"%s\" ]", item.name, buf);
+				} else {
+					ap_rprintf(r, "  \"%s\" : [ 0, \"\" ]", item.name);
+				}
 			}
 		else
-			if (item.filetype == APR_DIR) {
-				ap_rprintf(r, "\"%s\":[1,\"\"]", item.name);
-			} else if (item.filetype == APR_LNK) {
-				memset(&buf, '\0', 1022);
-				readlink(item.name, buf, 1022);
-				ap_rprintf(r, "\"%s\":[2,\"%s\"]", item.name, buf);
+			if (simple) {
+				if (item.filetype == APR_DIR) {
+					ap_rprintf(r, "[\"%s\",1]", item.name);
+				} else {
+					ap_rprintf(r, "[\"%s\",0]", item.name);
+				}
 			} else {
-				ap_rprintf(r, "\"%s\":[0,\"\"]", item.name);
+				if (item.filetype == APR_DIR) {
+					ap_rprintf(r, "\"%s\":[1,\"\"]", item.name);
+				} else if (item.filetype == APR_LNK) {
+					memset(&buf, '\0', 1022);
+					readlink(item.name, buf, 1022);
+					ap_rprintf(r, "\"%s\":[2,\"%s\"]", item.name, buf);
+				} else {
+					ap_rprintf(r, "\"%s\":[0,\"\"]", item.name);
+				}
 			}
 #else
-			if (item->d_type == DT_DIR) {
-				ap_rprintf(r, "  \"%s\" : [ 1, \"\" ]", item->d_name);
-			} else if (item->d_type == DT_LNK) {
-				memset(&buf, '\0', 1022);
-				readlink(item->d_name, buf, 1022);
-				ap_rprintf(r, "  \"%s\" : [ 2, \"%s\" ]", item->d_name, buf);
+			if (simple) {
+				if (item->d_type == DT_DIR) {
+					ap_rprintf(r, " [ \"%s\", 1 ]", item->d_name);
+				} else {
+					ap_rprintf(r, " [ \"%s\", 0 ]", item->d_name);
+				}
 			} else {
-				ap_rprintf(r, "  \"%s\" : [ 0, \"\" ]", item->d_name);
+				if (item->d_type == DT_DIR) {
+					ap_rprintf(r, "  \"%s\" : [ 1, \"\" ]", item->d_name);
+				} else if (item->d_type == DT_LNK) {
+					memset(&buf, '\0', 1022);
+					readlink(item->d_name, buf, 1022);
+					ap_rprintf(r, "  \"%s\" : [ 2, \"%s\" ]", item->d_name, buf);
+				} else {
+					ap_rprintf(r, "  \"%s\" : [ 0, \"\" ]", item->d_name);
+				}
 			}
 		else
-			if (item->d_type == DT_DIR) {
-				ap_rprintf(r, "\"%s\":[1,\"\"]", item->d_name);
-			} else if (item->d_type == DT_LNK) {
-				memset(&buf, '\0', 1022);
-				readlink(item->d_name, buf, 1022);
-				ap_rprintf(r, "\"%s\":[2,\"%s\"]", item->d_name, buf);
+			if (simple) {
+				if (item->d_type == DT_DIR) {
+					ap_rprintf(r, "[\"%s\",1]", item->d_name);
+				} else {
+					ap_rprintf(r, "[\"%s\",0]", item->d_name);
+				}
 			} else {
-				ap_rprintf(r, "\"%s\":[0,\"\"]", item->d_name);
+				if (item->d_type == DT_DIR) {
+					ap_rprintf(r, "\"%s\":[1,\"\"]", item->d_name);
+				} else if (item->d_type == DT_LNK) {
+					memset(&buf, '\0', 1022);
+					readlink(item->d_name, buf, 1022);
+					ap_rprintf(r, "\"%s\":[2,\"%s\"]", item->d_name, buf);
+				} else {
+					ap_rprintf(r, "\"%s\":[0,\"\"]", item->d_name);
+				}
 			}
 #endif // APACHE2
+	} // end of the while()
+	if (simple) {
+		if (pretty)
+			ap_rputs("\n}\n", r);
+		else
+			ap_rputs("}", r);
+	} else {
+		if (pretty)
+			ap_rputs("\n]\n", r);
+		else
+			ap_rputs("]", r);
 	}
-	if (pretty)
-		ap_rputs("\n}\n", r);
-	else
-		ap_rputs("}", r);
-
 	if (errno != 0) {
 #ifdef APACHE2
 		ap_log_rerror(APLOG_MARK, APLOG_NOERRNO|APLOG_ERR, 0, r, "Error: readdir failed\n");
