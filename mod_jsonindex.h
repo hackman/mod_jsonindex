@@ -35,6 +35,8 @@
 #include "http_main.h"
 #include "util_script.h"
 
+#define JSONINDEX_VERSION "0.03"
+
 #ifndef APACHE_RELEASE
 #define APACHE2
 #endif
