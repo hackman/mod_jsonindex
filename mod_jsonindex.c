@@ -226,14 +226,14 @@ static int handle_jsonindex(request_rec *r) {
 	} // end of the while()
 	if (simple) {
 		if (pretty)
-			ap_rputs("\n}\n", r);
-		else
-			ap_rputs("}", r);
-	} else {
-		if (pretty)
 			ap_rputs("\n]\n", r);
 		else
 			ap_rputs("]", r);
+	} else {
+		if (pretty)
+			ap_rputs("\n}\n", r);
+		else
+			ap_rputs("}", r);
 	}
 	if (errno != 0) {
 #ifdef APACHE2
